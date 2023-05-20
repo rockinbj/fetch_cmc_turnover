@@ -28,6 +28,12 @@ THREADS = 5
 CSV_FILE = ROOT_PATH/"data"/"cmc_turnover_rate.csv"
 RAND_WAIT_SEC = 0.5
 
+# cmc页面上有错误数据，此手写列表用来修正错误
+# 包含"KNC"的symbol，用指定的str作为name
+STATIC_LIST = {
+    "KNC": "kyber-network-crystal-v2",
+}
+
 
 def retry_wrapper(func, func_name='', retry_times=5, sleep_seconds=5, if_exit=True, **params):
     """
@@ -69,6 +75,15 @@ def get_cmc_market_pairs():
         r = requests.get(url_entry, headers=headers)
         r = r.json()
         marketPairs = r["data"]["marketPairs"]
+
+        # 用 固定 list 进行修正
+        for p in marketPairs:
+            for symbol, slug in STATIC_LIST.items():
+                if symbol in p['marketPair']:
+                    slug_ori = p['baseCurrencySlug']
+                    p['baseCurrencySlug'] = slug
+                    logger.info(f"手动修正：{p['marketPair']} 用 {slug} 替换 {slug_ori}")
+
         return marketPairs
     except Exception as e:
         # logger.exception(e)
