@@ -14,11 +14,12 @@ from webdriver_manager.chrome import ChromeDriverManager
 from my_logger import get_logger
 logger = get_logger("app.turnover")
 chrome_options = Options()
-chrome_options.add_argument('--no-sandbox')
-chrome_options.add_argument('--disable-dev-shm-usage')
+chrome_options.add_argument('--no-sandbox')  # 在centos运行需要打开
+chrome_options.add_argument('--disable-dev-shm-usage')    # 在centos运行需要打开
 chrome_options.add_argument("--headless")  # 无头模式，不显示浏览器界面
 
 TEST = True
+THREADS = 10
 CSV_FILE = Path("data/cmc_turnover_rate.csv")
 RAND_WAIT_SEC = 1
 
@@ -162,7 +163,7 @@ def main():
     #     save_for_one(pair)
     #     logger.debug(f"本轮用时: {(time.time()-_s_sub):.2f}s")
 
-    Parallel(n_jobs=30, backend="threading")(
+    Parallel(n_jobs=THREADS, backend="threading")(
         delayed(save_for_one)(pair) for pair in tqdm(cmc_pairs)
     )
 
