@@ -1,5 +1,6 @@
 import os
 import platform
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +23,7 @@ chrome_options.add_argument("--headless")  # 无头模式，不显示浏览器�
 
 TEST = False
 PARALLEL = True
-THREADS = 20
+THREADS = 5
 CSV_FILE = Path("data/cmc_turnover_rate.csv")
 RAND_WAIT_SEC = 0.5
 
@@ -152,6 +153,14 @@ def format_csv():
     return _df
 
 
+def backup_csv():
+    _df = pd.read_csv(str(CSV_FILE))
+    last_time = _df.iloc[-1]["candle_begin_time"].replace(" ", "_").replace(":", "-")
+    backup_path = CSV_FILE.with_name(CSV_FILE.stem + CSV_FILE.suffix + f".{last_time}")
+    shutil.copy(CSV_FILE, backup_path)
+    return backup_path
+
+
 def clear_chrom():
     system = platform.system()
     if system == "Linux":
@@ -159,6 +168,11 @@ def clear_chrom():
 
 
 def main():
+    bk_file = backup_csv()
+    if bk_file.exists():
+        logger.info(f"备份csv 完成")
+    else:
+        logger.warning(f"备份csv 失败，请检查，程序继续")
 
     cmc_pairs = get_cmc_market_pairs()
     if TEST: cmc_pairs = cmc_pairs[-5:]
@@ -184,11 +198,17 @@ def main():
 
     _df = format_csv()
     logger.info(f"整理csv文件 完成:\n{_df}")
-    clear_chrom()
-    logger.info(f"Linux 清理残留 chrom 进程 完成")
 
 
 if __name__ == '__main__':
-    _s = time.time()
-    main()
-    logger.info(f"总共用时: {(time.time()-_s):.2f}s")
+
+    try:
+        _s = time.time()
+        main()
+        logger.info(f"总共用时: {(time.time() - _s):.2f}s")
+    except Exception as e:
+        logger.error(f"主程序错误，退出: {e}")
+        logger.exception(e)
+    finally:
+        clear_chrom()
+        logger.info(f"Linux 清理残留 chrom 进程 完成")
