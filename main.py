@@ -14,6 +14,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 from my_logger import get_logger
 logger = get_logger("app.turnover")
 chrome_options = Options()
+chrome_options.add_argument('--no-sandbox')
+chrome_options.add_argument('--disable-dev-shm-usage')
 chrome_options.add_argument("--headless")  # 无头模式，不显示浏览器界面
 
 TEST = True
