@@ -1,3 +1,5 @@
+import os
+import platform
 import time
 from datetime import datetime
 from pathlib import Path
@@ -18,10 +20,11 @@ chrome_options.add_argument('--no-sandbox')  # 在centos运行需要打开
 chrome_options.add_argument('--disable-dev-shm-usage')    # 在centos运行需要打开
 chrome_options.add_argument("--headless")  # 无头模式，不显示浏览器界面
 
-TEST = True
-THREADS = 10
+TEST = False
+PARALLEL = True
+THREADS = 20
 CSV_FILE = Path("data/cmc_turnover_rate.csv")
-RAND_WAIT_SEC = 1
+RAND_WAIT_SEC = 0.5
 
 
 def retry_wrapper(func, func_name='', retry_times=5, sleep_seconds=5, if_exit=True, **params):
@@ -115,15 +118,15 @@ def get_cmc_turnover_rate(_name, _symbol):
                 logger.debug(f"{_symbol} 子元素 {e.text} 不匹配: {err}")
                 continue
     else:
-        logger.info(f"{_symbol} 父元素 最终失败")
+        logger.warning(f"{_symbol} 父元素 最终失败")
 
     driver.quit()
-    if pct == -1.0: logger.info(f"{_symbol} 子元素 最终失败")
+    if pct == -1.0: logger.warning(f"{_symbol} 子元素 最终失败")
     return pct
 
 
 def save_for_one(pair):
-    _ms = RAND_WAIT_SEC * 1000
+    _ms = int(RAND_WAIT_SEC * 1000)
     time.sleep(randint(_ms, _ms*2)/1000)
 
     _name = pair["baseCurrencySlug"]
@@ -135,12 +138,8 @@ def save_for_one(pair):
     _now = datetime.now().replace(minute=0, second=0, microsecond=0)
     df = pd.DataFrame({'candle_begin_time': [_now], 'symbol': [_symbol], 'name': [_name], 'turnover_rate': [_pct]})
 
-    if not CSV_FILE.exists():
-        df.to_csv(str(CSV_FILE), index=False)
-    else:
-        df.to_csv(str(CSV_FILE), mode="a", header=False, index=False)
-
-    logger.info(f"{_symbol} 写入csv 完成:\n{df}")
+    logger.info(f"{_symbol} 爬取 完成:\n{df}")
+    return df
 
 
 def format_csv():
@@ -150,7 +149,13 @@ def format_csv():
     _df = _df.sort_values(by="candle_begin_time")
     _df = _df.reset_index(drop=True)
     _df.to_csv(str(CSV_FILE), index=False)
-    logger.info(f"整理csv文件 完成:\n{_df}")
+    return _df
+
+
+def clear_chrom():
+    system = platform.system()
+    if system == "Linux":
+        os.system("pkill -f chrom")
 
 
 def main():
@@ -158,14 +163,29 @@ def main():
     cmc_pairs = get_cmc_market_pairs()
     if TEST: cmc_pairs = cmc_pairs[-5:]
 
-    # for pair in tqdm(cmc_pairs):
-    #     _s_sub = time.time()
-    #     save_for_one(pair)
-    #     logger.debug(f"本轮用时: {(time.time()-_s_sub):.2f}s")
+    dfs = []
+    if PARALLEL is False:
+        for pair in tqdm(cmc_pairs):
+            _s_sub = time.time()
+            dfs.append(save_for_one(pair))
+            logger.debug(f"本轮用时: {(time.time()-_s_sub):.2f}s")
+    else:
+        dfs = Parallel(n_jobs=THREADS, backend="threading")(
+            delayed(save_for_one)(pair) for pair in tqdm(cmc_pairs)
+        )
 
-    Parallel(n_jobs=THREADS, backend="threading")(
-        delayed(save_for_one)(pair) for pair in tqdm(cmc_pairs)
-    )
+    all_df = pd.concat(dfs, ignore_index=True)
+    logger.info(f"汇总 完成：\n{all_df}")
+
+    if not CSV_FILE.exists():
+        all_df.to_csv(str(CSV_FILE), index=False)
+    else:
+        all_df.to_csv(str(CSV_FILE), mode="a", header=False, index=False)
+
+    _df = format_csv()
+    logger.info(f"整理csv文件 完成:\n{_df}")
+    clear_chrom()
+    logger.info(f"Linux 清理残留 chrom 进程 完成")
 
 
 if __name__ == '__main__':
