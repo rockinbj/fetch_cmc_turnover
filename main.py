@@ -4,6 +4,7 @@ import shutil
 import time
 from datetime import datetime
 from pathlib import Path
+ROOT_PATH = Path(__file__).resolve().parent
 from random import randint
 
 import pandas as pd
@@ -24,7 +25,7 @@ chrome_options.add_argument("--headless")  # 无头模式，不显示浏览器�
 TEST = False
 PARALLEL = True
 THREADS = 5
-CSV_FILE = Path("data/cmc_turnover_rate.csv")
+CSV_FILE = ROOT_PATH/"data"/"cmc_turnover_rate.csv"
 RAND_WAIT_SEC = 0.5
 
 
