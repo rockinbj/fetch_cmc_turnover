@@ -16,6 +16,7 @@ logger = get_logger("app.turnover")
 chrome_options = Options()
 chrome_options.add_argument("--headless")  # 无头模式，不显示浏览器界面
 
+TEST = True
 CSV_FILE = Path("data/cmc_turnover_rate.csv")
 RAND_WAIT_SEC = 1
 
@@ -152,7 +153,7 @@ def format_csv():
 def main():
 
     cmc_pairs = get_cmc_market_pairs()
-    # cmc_pairs = cmc_pairs[-5:]
+    if TEST: cmc_pairs = cmc_pairs[-5:]
 
     # for pair in tqdm(cmc_pairs):
     #     _s_sub = time.time()
