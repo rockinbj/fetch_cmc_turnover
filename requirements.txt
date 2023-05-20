@@ -4,3 +4,4 @@ joblib==1.2.0
 selenium==3.141.0
 tqdm==4.65.0
 webdriver-manager==3.8.6
+concurrent_log_handler==0.9.23
