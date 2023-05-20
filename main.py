@@ -23,6 +23,7 @@ chrome_options.add_argument('--disable-dev-shm-usage')    # 在centos运行需�
 chrome_options.add_argument("--headless")  # 无头模式，不显示浏览器界面
 
 TEST = False
+TEST_SYMBOLS = ["KNC"]
 PARALLEL = True
 THREADS = 5
 CSV_FILE = ROOT_PATH/"data"/"cmc_turnover_rate.csv"
@@ -191,7 +192,12 @@ def main():
         logger.warning(f"备份csv 失败，请检查，程序继续")
 
     cmc_pairs = get_cmc_market_pairs()
-    if TEST: cmc_pairs = cmc_pairs[-5:]
+    if TEST:
+        cmc_pairs_ori = cmc_pairs
+        cmc_pairs = cmc_pairs_ori[-3:]
+        for s in TEST_SYMBOLS:
+            for p in cmc_pairs_ori:
+                if s in p["marketPair"]: cmc_pairs.append(p)
 
     dfs = []
     if PARALLEL is False:
