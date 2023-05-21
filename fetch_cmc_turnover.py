@@ -151,7 +151,7 @@ def get_cmc_turnover_rate(_name, _symbol, _driver):
     return pct
 
 
-def save_for_one(pair):
+def save_for_one(pair, driver_path):
     _ms = int(RAND_WAIT_SEC * 1000)
     time.sleep(randint(_ms, _ms*2)/1000)
 
@@ -161,7 +161,6 @@ def save_for_one(pair):
     # 为每个线程创建独立的drvier，防止冲突
     temp_dir = Path(tempfile.mkdtemp())
     temp_file = temp_dir/"chromedriver"
-    driver_path = ChromeDriverManager().install()
     shutil.copy2(driver_path, str(temp_file))
     driver = webdriver.Chrome(executable_path=str(temp_file), options=chrome_options)
 
@@ -237,17 +236,18 @@ def main():
 
     # 单线程 或者 多线程 爬取内容
     # 单线程 约 30分钟 一轮，多线程约 20 分钟 一轮
+    driver_path = ChromeDriverManager().install()
     dfs = []
     if PARALLEL is False:
         global RAND_WAIT_SEC
         RAND_WAIT_SEC = 0
         for pair in tqdm(cmc_pairs):
             _s_sub = time.time()
-            dfs.append(save_for_one(pair))
+            dfs.append(save_for_one(pair, driver_path))
             logger.debug(f"本轮用时: {(time.time()-_s_sub):.2f}s")
     else:
         dfs = Parallel(n_jobs=THREADS, backend="threading")(
-            delayed(save_for_one)(pair) for pair in tqdm(cmc_pairs)
+            delayed(save_for_one)(pair, driver_path) for pair in tqdm(cmc_pairs)
         )
 
     all_df = pd.concat(dfs, ignore_index=True)
