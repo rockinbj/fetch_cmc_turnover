@@ -12,7 +12,7 @@ import requests
 from joblib import Parallel, delayed
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 from tqdm import tqdm
 from webdriver_manager.chrome import ChromeDriverManager
 from my_logger import get_logger
@@ -60,7 +60,7 @@ def retry_wrapper(func, func_name='', retry_times=5, sleep_seconds=5, if_exit=Tr
             time.sleep(sleep_seconds)
     else:
         if if_exit:
-            raise ValueError(f'{func_name} 重试无效，程序退出')
+            raise RuntimeError(f'{func_name} 重试无效，程序退出')
         else:
             logger.error(f'{func_name} 重试无效，程序不退出，跳过')
 
@@ -120,20 +120,25 @@ def get_cmc_turnover_rate(_name, _symbol):
     if percent_element:
         for e in percent_element:
             try:
-                if "%" in e.text:
-                    pct = e.text.replace("%", "")
+                _text = e.text
+
+                if "%" in _text:
+                    pct = _text.replace("%", "")
                     pct = float(pct)
                     pct /= 100
                     pct = round(pct, 4)
-                    logger.debug(f"{_symbol} 子元素 {e.text} 匹配")
+                    logger.debug(f"{_symbol} 子元素 {_text} 匹配")
                     break
-                elif 0 < float(e.text) < 1:
-                    pct = float(e.text)
+                elif 0 < float(_text) < 1:
+                    pct = float(_text)
                     pct = round(pct, 4)
-                    logger.debug(f"{_symbol} 子元素 {e.text} 匹配")
+                    logger.debug(f"{_symbol} 子元素 {_text} 匹配")
                     break
+            except StaleElementReferenceException as err:
+                logger.error(f"{_symbol} 获取 子元素 文本 失败，跳过: {err}")
+                continue
             except Exception as err:
-                logger.debug(f"{_symbol} 子元素 {e.text} 不匹配: {err}")
+                logger.debug(f"{_symbol} 子元素 {_text} 不匹配: {err}")
                 continue
     else:
         logger.warning(f"{_symbol} 父元素 最终失败")
@@ -226,7 +231,7 @@ if __name__ == '__main__':
 
     try:
         _s = time.time()
-        main()
+        retry_wrapper(main, func_name="主程序", retry_times=2, sleep_seconds=300, if_exit=True)
         logger.info(f"总共用时: {(time.time() - _s):.2f}s")
     except Exception as e:
         logger.error(f"主程序错误，退出: {e}")
