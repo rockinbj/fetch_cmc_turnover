@@ -28,7 +28,7 @@ TEST_SYMBOLS = ["KNC"]
 PARALLEL = True
 THREADS = 5
 CSV_FILE = ROOT_PATH/"data"/"cmc_turnover_rate.csv"
-RAND_WAIT_SEC = 0.5
+RAND_WAIT_SEC = 1
 
 # cmc页面上有错误数据，此手写列表用来修正错误
 # 包含"KNC"的symbol，用指定的str作为name
