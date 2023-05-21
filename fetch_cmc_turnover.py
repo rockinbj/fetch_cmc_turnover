@@ -16,21 +16,24 @@ from joblib import Parallel, delayed
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
-from tqdm import tqdm
 from webdriver_manager.chrome import ChromeDriverManager
+from tqdm import tqdm
 from my_logger import get_logger
 logger = get_logger("app.turnover")
 chrome_options = Options()
 chrome_options.add_argument('--no-sandbox')  # 在centos运行需要打开
 chrome_options.add_argument('--disable-dev-shm-usage')    # 在centos运行需要打开
 chrome_options.add_argument("--headless")  # 无头模式，不显示浏览器界面
+pd.set_option('display.max_columns', None)
+pd.set_option('display.expand_frame_repr', False)
 
 TEST = False
 TEST_SYMBOLS = ["KNC"]
 PARALLEL = True
 THREADS = 5
-CSV_FILE = ROOT_PATH/"data"/"cmc_turnover_rate.csv"
-RAND_WAIT_SEC = 1
+# CSV_FILE = ROOT_PATH/"data"/"cmc_turnover_rate.csv"
+CSV_FILE = ROOT_PATH/"data"/"cmc_cap_vol_tor.csv"
+RAND_WAIT_SEC = 0.5
 
 # cmc页面上有错误数据，此手写列表用来修正错误
 # 包含"KNC"的symbol，用指定的str作为name
@@ -97,7 +100,6 @@ def get_cmc_market_pairs():
 def get_cmc_turnover_rate(_name, _symbol, _driver):
     page_url = f"https://coinmarketcap.com/currencies/{_name}"
     logger.debug(f"{page_url}")
-    # driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
 
     retry_wrapper(_driver.get, func_name=f"webpage {_symbol}", sleep_seconds=2, if_exit=False, url=page_url)
 
@@ -151,6 +153,109 @@ def get_cmc_turnover_rate(_name, _symbol, _driver):
     return pct
 
 
+def get_cmc_cap_vol_tor(_name, _symbol, _driver):
+    """
+    获取cmc 币种页面 中的：
+        1、流通市值
+        2、24h CEX成交量
+        3、24h 换手率
+    举例：https://coinmarketcap.com/currencies/qtum/
+    :param _name:
+    :param _symbol:
+    :param _driver:
+    :return:
+    """
+    page_url = f"https://coinmarketcap.com/currencies/{_name}"
+    logger.debug(f"{page_url}")
+
+    retry_wrapper(_driver.get, func_name=f"webpage {_symbol}", sleep_seconds=2, if_exit=False, url=page_url)
+
+    # 获取 流通市值
+    _cap = -1.0
+    _cap_xpaths = [
+        '//*[@id="section-coin-stats"]/div/dl/div[1]/div[1]/dd',
+        '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[2]/div/div[3]/div[1]/div[1]/div[1]/div[2]/div',
+        '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[1]/div[1]/div[2]/div',
+    ]
+    for x in _cap_xpaths:
+        try:
+            _cap_item = _driver.find_element_by_xpath(x)
+            _cap_str = _cap_item.text
+            _cap_str = _cap_str.replace("$","").replace(",","")
+            _cap = float(_cap_str)
+
+            logger.debug(f"{_symbol} 流通市值 找到 {_cap}")
+            break
+        except NoSuchElementException as err:
+            # logger.debug(f"{_symbol} 获取 流通市值 元素失效，跳过: {err}")
+            continue
+        except StaleElementReferenceException as err:
+            logger.error(f"{_symbol} 获取 流通市值 元素失效，跳过: {err}")
+            continue
+        except Exception as err:
+            logger.error(f"{_symbol} 获取 流通市值 失败，跳过: {err}")
+            logger.exception(err)
+            continue
+    if _cap == -1.0: logger.warning(f"{_symbol} 流通市值 最终失败")
+
+    # 获取 成交量
+    _vol = -1.0
+    _vol_xpaths = [
+        '//*[@id="section-coin-stats"]/div/dl/div[2]/div[1]/dd',
+        '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[2]/div/div[3]/div[1]/div[3]/div[1]/div[2]/div',
+        '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[3]/div[1]/div[2]/div',
+    ]
+    for x in _vol_xpaths:
+        try:
+            _vol_item = _driver.find_element_by_xpath(x)
+            _vol_str = _vol_item.text
+            _vol_str = _vol_str.replace("$", "").replace(",", "")
+            _vol = float(_vol_str)
+
+            logger.debug(f"{_symbol} 成交量 找到 {_vol}")
+            break
+        except NoSuchElementException as err:
+            continue
+        except StaleElementReferenceException as err:
+            logger.error(f"{_symbol} 获取 成交量 元素失效，跳过: {err}")
+            continue
+        except Exception as err:
+            logger.error(f"{_symbol} 获取 成交量 失败，跳过: {err}")
+            logger.exception(err)
+            continue
+    if _vol == -1.0: logger.warning(f"{_symbol} 成交量 最终失败")
+
+    # 获取 换手率
+    _tor = -1.0
+    _tor_xpaths = [
+        '//*[@id="section-coin-stats"]/div/dl/div[3]/div/dd',
+        '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[2]/div/div[3]/div[1]/div[1]/div[2]/div/div[2]',
+        '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[1]/div[2]/div/div[2]',
+    ]
+    for x in _tor_xpaths:
+        try:
+            _tor_item = _driver.find_element_by_xpath(x)
+            _tor_str = _tor_item.text
+            _tor_str = _tor_str.replace("%", "")
+            _tor = float(_tor_str)
+            _tor = _tor if 0 <= _tor <= 1 else _tor / 100
+
+            logger.debug(f"{_symbol} 换手率 找到 {_tor}")
+            break
+        except NoSuchElementException as err:
+            continue
+        except StaleElementReferenceException as err:
+            logger.error(f"{_symbol} 获取 换手率 元素失效，跳过: {err}")
+            continue
+        except Exception as err:
+            logger.error(f"{_symbol} 获取 换手率 失败，跳过: {err}")
+            logger.exception(err)
+            continue
+    if _tor == -1.0: logger.warning(f"{_symbol} 换手率 最终失败")
+
+    return _cap, _vol, _tor
+
+
 def save_for_one(pair, driver_path):
     _ms = int(RAND_WAIT_SEC * 1000)
     time.sleep(randint(_ms, _ms*2)/1000)
@@ -164,7 +269,8 @@ def save_for_one(pair, driver_path):
     shutil.copy2(driver_path, str(temp_file))
     driver = webdriver.Chrome(executable_path=str(temp_file), options=chrome_options)
 
-    _pct = get_cmc_turnover_rate(_name, _symbol, _driver=driver)
+    # _pct = get_cmc_turnover_rate(_name, _symbol, _driver=driver)
+    _cap, _vol, _tor = get_cmc_cap_vol_tor(_name, _symbol, driver)
 
     # 清理driver和临时目录
     driver.quit()
@@ -172,7 +278,14 @@ def save_for_one(pair, driver_path):
 
     # 获取当前时间并将分钟和秒设置为0，以便时间戳仅精确到小时
     _now = datetime.now().replace(minute=0, second=0, microsecond=0)
-    df = pd.DataFrame({'candle_begin_time': [_now], 'symbol': [_symbol], 'name': [_name], 'turnover_rate': [_pct]})
+    df = pd.DataFrame({
+        'candle_begin_time': [_now],
+        'symbol': [_symbol],
+        'name': [_name],
+        'market_cap': [_cap],  # 流通市值
+        'vol': [_vol],  # 24h CEX交易量
+        'turnover_rate': [_tor],  # 换手率
+    })
 
     logger.info(f"{_symbol} 爬取 完成:\n{df}")
     return df
@@ -189,11 +302,14 @@ def format_csv():
 
 
 def backup_csv():
-    _df = pd.read_csv(str(CSV_FILE))
-    last_time = _df.iloc[-1]["candle_begin_time"].replace(" ", "_").replace(":", "-")
-    backup_path = CSV_FILE.with_name(CSV_FILE.stem + CSV_FILE.suffix + f".{last_time}")
-    shutil.copy(CSV_FILE, backup_path)
-    return backup_path
+    if CSV_FILE.exists():
+        _df = pd.read_csv(str(CSV_FILE))
+        last_time = _df.iloc[-1]["candle_begin_time"].replace(" ", "_").replace(":", "-")
+        backup_path = CSV_FILE.with_name(CSV_FILE.stem + CSV_FILE.suffix + f".{last_time}")
+        shutil.copy(CSV_FILE, backup_path)
+        return backup_path
+    else:
+        return None
 
 
 def clear_chrom():
@@ -204,7 +320,7 @@ def clear_chrom():
 
 def check_running():
     main_program_name = os.path.basename(sys.argv[0])
-    current_pid = os.getpid()
+    current_pid = os.getpid()  # 获取pid，排除检查自己
     command = "ps ax -o pid,args"
     process_list = subprocess.check_output(command, shell=True, text=True)
     process_lines = process_list.strip().split("\n")
@@ -219,11 +335,12 @@ def check_running():
 
 def main():
     # 检查 是否已经有 爬虫在运行，不争抢
-    check_running()
+    if platform.system() == "Linux":
+        check_running()
 
     # 备份当前csv，以防破坏已有数据，备份文件名 是最后写入的 candle_begin_time
     bk_file = backup_csv()
-    if bk_file.exists():
+    if isinstance(bk_file, Path) and bk_file.exists():
         logger.info(f"备份csv 完成")
     else:
         logger.warning(f"备份csv 失败，请检查，程序继续")
