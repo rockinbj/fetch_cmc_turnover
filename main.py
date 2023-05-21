@@ -1,6 +1,7 @@
 import os
 import platform
 import shutil
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -91,12 +92,12 @@ def get_cmc_market_pairs():
         return None
 
 
-def get_cmc_turnover_rate(_name, _symbol):
+def get_cmc_turnover_rate(_name, _symbol, _driver):
     page_url = f"https://coinmarketcap.com/currencies/{_name}"
     logger.debug(f"{page_url}")
-    driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
+    # driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
 
-    retry_wrapper(driver.get, func_name=f"webpage {_symbol}", sleep_seconds=2, if_exit=False, url=page_url)
+    retry_wrapper(_driver.get, func_name=f"webpage {_symbol}", sleep_seconds=2, if_exit=False, url=page_url)
 
     pct = -1.0
 
@@ -108,7 +109,7 @@ def get_cmc_turnover_rate(_name, _symbol):
     percent_element = None
     for selector in selectors:
         try:
-            percent_element = driver.find_elements_by_css_selector(selector)
+            percent_element = _driver.find_elements_by_css_selector(selector)
             # logger.debug(percent_element)
             if percent_element:
                 logger.debug(f"{_symbol} 父元素 {selector} 匹配")
@@ -143,7 +144,7 @@ def get_cmc_turnover_rate(_name, _symbol):
     else:
         logger.warning(f"{_symbol} 父元素 最终失败")
 
-    driver.quit()
+    # driver.quit()
     if pct == -1.0: logger.warning(f"{_symbol} 子元素 最终失败")
     return pct
 
@@ -154,8 +155,19 @@ def save_for_one(pair):
 
     _name = pair["baseCurrencySlug"]
     _symbol = pair["marketPair"]
-    _pct = get_cmc_turnover_rate(_name, _symbol)
-    # logger.debug(f"symbol: {_symbol} turnover_rate: {_pct}")
+
+    # 为每个线程创建独立的drvier，防止冲突
+    temp_dir = Path(tempfile.mkdtemp())
+    temp_file = temp_dir/"chromedriver"
+    driver_path = ChromeDriverManager().install()
+    shutil.copy2(driver_path, str(temp_file))
+    driver = webdriver.Chrome(executable_path=str(temp_file), options=chrome_options)
+
+    _pct = get_cmc_turnover_rate(_name, _symbol, _driver=driver)
+
+    # 清理driver和临时目录
+    driver.quit()
+    shutil.rmtree(temp_dir)
 
     # 获取当前时间并将分钟和秒设置为0，以便时间戳仅精确到小时
     _now = datetime.now().replace(minute=0, second=0, microsecond=0)
