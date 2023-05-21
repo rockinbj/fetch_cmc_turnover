@@ -204,11 +204,15 @@ def clear_chrom():
 
 def check_running():
     main_program_name = os.path.basename(sys.argv[0])
-    command = "ps ax -o args"
+    current_pid = os.getpid()
+    command = "ps ax -o pid,args"
     process_list = subprocess.check_output(command, shell=True, text=True)
     process_lines = process_list.strip().split("\n")
-    for line in process_lines:
-        if main_program_name in line and line.strip() != " ".join(sys.argv):
+
+    for line in process_lines[1:]:  # 跳过表头行
+        pid, args = line.strip().split(maxsplit=1)
+
+        if int(pid) != current_pid and main_program_name in args:
             logger.info(f"爬虫 主程序 {main_program_name} 已经有进程，本次不运行，退出")
             exit()
 
