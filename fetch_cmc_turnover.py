@@ -1,6 +1,8 @@
 import os
 import platform
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 from datetime import datetime
@@ -201,14 +203,31 @@ def clear_chrom():
         os.system("pkill -f chrom")
 
 
+def check_running():
+    main_program_name = os.path.basename(sys.argv[0])
+    command = "ps ax -o args"
+    process_list = subprocess.check_output(command, shell=True, text=True)
+    process_lines = process_list.strip().split("\n")
+    for line in process_lines:
+        if main_program_name in line and line.strip() != " ".join(sys.argv):
+            logger.info(f"爬虫 主程序 {main_program_name} 已经有进程，本次不运行，退出")
+            exit()
+
+
 def main():
+    # 检查 是否已经有 爬虫在运行，不争抢
+    check_running()
+
+    # 备份当前csv，以防破坏已有数据，备份文件名 是最后写入的 candle_begin_time
     bk_file = backup_csv()
     if bk_file.exists():
         logger.info(f"备份csv 完成")
     else:
         logger.warning(f"备份csv 失败，请检查，程序继续")
 
+    # 获取cmc symbol列表，当前获取的是binance USDT prep币种
     cmc_pairs = get_cmc_market_pairs()
+    # 如果是测试局，减少币种数量，可以指定 测试币种
     if TEST:
         cmc_pairs_ori = cmc_pairs
         cmc_pairs = cmc_pairs_ori[-3:]
@@ -216,8 +235,12 @@ def main():
             for p in cmc_pairs_ori:
                 if s in p["marketPair"]: cmc_pairs.append(p)
 
+    # 单线程 或者 多线程 爬取内容
+    # 单线程 约 30分钟 一轮，多线程约 20 分钟 一轮
     dfs = []
     if PARALLEL is False:
+        global RAND_WAIT_SEC
+        RAND_WAIT_SEC = 0
         for pair in tqdm(cmc_pairs):
             _s_sub = time.time()
             dfs.append(save_for_one(pair))
@@ -230,11 +253,13 @@ def main():
     all_df = pd.concat(dfs, ignore_index=True)
     logger.info(f"汇总 完成：\n{all_df}")
 
+    # 写入csv
     if not CSV_FILE.exists():
         all_df.to_csv(str(CSV_FILE), index=False)
     else:
         all_df.to_csv(str(CSV_FILE), mode="a", header=False, index=False)
 
+    # 重新整理csv，将candle_begin_time相同的 按照最新覆盖，最后 按时间排序
     _df = format_csv()
     logger.info(f"整理csv文件 完成:\n{_df}")
 
