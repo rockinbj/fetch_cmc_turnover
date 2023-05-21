@@ -15,7 +15,8 @@ import requests
 from joblib import Parallel, delayed
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
+from selenium.common.exceptions import NoSuchElementException, \
+    TimeoutException, StaleElementReferenceException, InvalidSelectorException
 from webdriver_manager.chrome import ChromeDriverManager
 from tqdm import tqdm
 from my_logger import get_logger
@@ -28,7 +29,8 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.expand_frame_repr', False)
 
 TEST = False
-TEST_SYMBOLS = ["KNC"]
+TEST_SYMBOLS = ["SXP"]
+OTHER_SYMBOL_NUM = 2  # 最小1
 PARALLEL = True
 THREADS = 5
 # CSV_FILE = ROOT_PATH/"data"/"cmc_turnover_rate.csv"
@@ -177,8 +179,8 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
     # 获取 流通市值
     # 多个xpath，逐一尝试
     _cap_xpaths = [
-        '//div[contains(@class, "cPJgvg")][.//dt[contains(text(), "Market cap") and not(contains(text(), "Volume"))]]//dd[@class="sc-8755d3ba-0 eXRmzO base-text"]/text()',
-        '//div[contains(@class, "statsBlockInner")][.//div[contains(text(), "Market Cap") and not(contains(text(), "24h Volume / Market Cap"))]]//div[@class="statsValue"]/text()',
+        '//div[contains(@class, "cPJgvg")][.//dt[contains(text(), "Market cap") and not(contains(text(), "Volume"))]]//dd[@class="sc-8755d3ba-0 eXRmzO base-text"]',
+        '//div[contains(@class, "statsBlockInner")][.//div[contains(text(), "Market Cap") and not(contains(text(), "24h Volume / Market Cap"))]]//div[@class="statsValue"]',
         '//*[@id="section-coin-stats"]/div/dl/div[1]/div[1]/dd',
         '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[2]/div/div[3]/div[1]/div[1]/div[1]/div[2]/div',
         '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[1]/div[1]/div[2]/div',
@@ -193,22 +195,22 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
             logger.debug(f"{_symbol} 流通市值 找到 {_cap}")
             break
         except NoSuchElementException as err:
-            # logger.debug(f"{_symbol} 获取 流通市值 元素失效，跳过: {err}")
+            # logger.debug(f"{_symbol} 获取 流通市值 未找到，继续搜索: {err}")
             continue
         except StaleElementReferenceException as err:
-            logger.error(f"{_symbol} 获取 流通市值 元素失效，跳过: {err}")
+            logger.error(f"{_symbol} 获取 流通市值 元素失效，继续搜索: {err}")
             continue
         except Exception as err:
             if _symbol != "DEFI/USDT":  # DEFI本身就没有数据，跳过告警
-                logger.error(f"{_symbol} 获取 换手率 失败，跳过: {err}")
+                logger.error(f"{_symbol} 获取 流通市值 报错，继续搜索: {err}")
                 logger.exception(err)
             continue
     if _cap == -1.0: logger.warning(f"{_symbol} 流通市值 最终失败")
 
     # 获取 成交量
     _vol_xpaths = [
-        '//div[contains(@class, "cPJgvg")][.//dt[contains(text(), "Volume (24h)") and not(contains(text(), "Volume/Market cap"))]]//dd[@class="sc-8755d3ba-0 eXRmzO base-text"]/text()',
-        '//div[contains(@class, "statsBlockInner")][.//div[contains(@class, "statsLabel") and contains(text(), "Volume") and not(contains(text(), "24h Volume / Market Cap"))]]//div[@class="statsValue"]/text()',
+        '//div[contains(@class, "cPJgvg")][.//dt[contains(text(), "Volume (24h)") and not(contains(text(), "Volume/Market cap"))]]//dd[@class="sc-8755d3ba-0 eXRmzO base-text"]',
+        '//div[contains(@class, "statsBlockInner")][.//div[contains(@class, "statsLabel") and contains(text(), "Volume") and not(contains(text(), "24h Volume / Market Cap"))]]//div[@class="statsValue"]',
         '//*[@id="section-coin-stats"]/div/dl/div[2]/div[1]/dd',
         '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[2]/div/div[3]/div[1]/div[3]/div[1]/div[2]/div',
         '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[3]/div[1]/div[2]/div',
@@ -225,22 +227,22 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
         except NoSuchElementException as err:
             continue
         except StaleElementReferenceException as err:
-            logger.error(f"{_symbol} 获取 成交量 元素失效，跳过: {err}")
+            logger.error(f"{_symbol} 获取 成交量 元素失效，继续搜索: {err}")
             continue
         except Exception as err:
             if _symbol != "DEFI/USDT":  # DEFI本身就没有数据，跳过告警
-                logger.error(f"{_symbol} 获取 换手率 失败，跳过: {err}")
+                logger.error(f"{_symbol} 获取 成交量 报错，继续搜索: {err}")
                 logger.exception(err)
             continue
     if _vol == -1.0: logger.warning(f"{_symbol} 成交量 最终失败")
 
     # 获取 换手率
     _tor_xpaths = [
-        '//div[contains(@class, "cPJgvg")][.//dt[contains(text(), "Volume/Market cap")]]//dd[@class="sc-8755d3ba-0 eXRmzO base-text"]/text()',
-        '//div[contains(@class, "statsBlockInner")][.//div[contains(text(), "24h Volume / Market Cap")]]//div[@class="priceValue"]/text()',
+        '//div[contains(@class, "cPJgvg")][.//dt[contains(text(), "Volume/Market cap")]]//dd[@class="sc-8755d3ba-0 eXRmzO base-text"]',
+        '//div[contains(@class, "statsBlockInner")][.//div[contains(text(), "24h Volume / Market Cap")]]//div[@class="priceValue"]',
         '//*[@id="section-coin-stats"]/div/dl/div[3]/div/dd',
         '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[2]/div/div[3]/div[1]/div[1]/div[2]/div/div[2]',
-        '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[1]/div[2]/div/div[2]',
+        '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[1]/div[3]/div/div[2]',
     ]
     for x in _tor_xpaths:
         try:
@@ -252,14 +254,18 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
 
             logger.debug(f"{_symbol} 换手率 找到 {_tor}")
             break
+
         except NoSuchElementException as err:
+            # logger.debug(f"{_symbol} 获取 换手率 未找到，继续搜索: {err}")
+            # logger.exception(err)
             continue
         except StaleElementReferenceException as err:
-            logger.error(f"{_symbol} 获取 换手率 元素失效，跳过: {err}")
+            logger.error(f"{_symbol} 获取 换手率 元素失效，继续搜索: {err}")
+            logger.exception(err)
             continue
         except Exception as err:
             if _symbol != "DEFI/USDT":  # DEFI本身就没有数据，跳过告警
-                logger.error(f"{_symbol} 获取 换手率 失败，跳过: {err}")
+                logger.error(f"{_symbol} 获取 换手率 报错，继续搜索: {err}")
                 logger.exception(err)
             continue
     if _tor == -1.0: logger.warning(f"{_symbol} 换手率 最终失败")
@@ -361,7 +367,7 @@ def main():
     # 如果是测试局，减少币种数量，可以指定 测试币种
     if TEST:
         cmc_pairs_ori = cmc_pairs
-        cmc_pairs = cmc_pairs_ori[-3:]
+        cmc_pairs = cmc_pairs_ori[-OTHER_SYMBOL_NUM:]
         for s in TEST_SYMBOLS:
             for p in cmc_pairs_ori:
                 if s in p["marketPair"]: cmc_pairs.append(p)
