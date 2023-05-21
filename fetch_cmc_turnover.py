@@ -170,9 +170,15 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
 
     retry_wrapper(_driver.get, func_name=f"webpage {_symbol}", sleep_seconds=2, if_exit=False, url=page_url)
 
-    # 获取 流通市值
     _cap = -1.0
+    _vol = -1.0
+    _tor = -1.0
+
+    # 获取 流通市值
+    # 多个xpath，逐一尝试
     _cap_xpaths = [
+        '//div[contains(@class, "cPJgvg")][.//dt[contains(text(), "Market cap") and not(contains(text(), "Volume"))]]//dd[@class="sc-8755d3ba-0 eXRmzO base-text"]/text()',
+        '//div[contains(@class, "statsBlockInner")][.//div[contains(text(), "Market Cap") and not(contains(text(), "24h Volume / Market Cap"))]]//div[@class="statsValue"]/text()',
         '//*[@id="section-coin-stats"]/div/dl/div[1]/div[1]/dd',
         '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[2]/div/div[3]/div[1]/div[1]/div[1]/div[2]/div',
         '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[1]/div[1]/div[2]/div',
@@ -193,14 +199,16 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
             logger.error(f"{_symbol} 获取 流通市值 元素失效，跳过: {err}")
             continue
         except Exception as err:
-            logger.error(f"{_symbol} 获取 流通市值 失败，跳过: {err}")
-            logger.exception(err)
+            if _symbol != "DEFI/USDT":  # DEFI本身就没有数据，跳过告警
+                logger.error(f"{_symbol} 获取 换手率 失败，跳过: {err}")
+                logger.exception(err)
             continue
     if _cap == -1.0: logger.warning(f"{_symbol} 流通市值 最终失败")
 
     # 获取 成交量
-    _vol = -1.0
     _vol_xpaths = [
+        '//div[contains(@class, "cPJgvg")][.//dt[contains(text(), "Volume (24h)") and not(contains(text(), "Volume/Market cap"))]]//dd[@class="sc-8755d3ba-0 eXRmzO base-text"]/text()',
+        '//div[contains(@class, "statsBlockInner")][.//div[contains(@class, "statsLabel") and contains(text(), "Volume") and not(contains(text(), "24h Volume / Market Cap"))]]//div[@class="statsValue"]/text()',
         '//*[@id="section-coin-stats"]/div/dl/div[2]/div[1]/dd',
         '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[2]/div/div[3]/div[1]/div[3]/div[1]/div[2]/div',
         '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[3]/div[1]/div[2]/div',
@@ -220,14 +228,16 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
             logger.error(f"{_symbol} 获取 成交量 元素失效，跳过: {err}")
             continue
         except Exception as err:
-            logger.error(f"{_symbol} 获取 成交量 失败，跳过: {err}")
-            logger.exception(err)
+            if _symbol != "DEFI/USDT":  # DEFI本身就没有数据，跳过告警
+                logger.error(f"{_symbol} 获取 换手率 失败，跳过: {err}")
+                logger.exception(err)
             continue
     if _vol == -1.0: logger.warning(f"{_symbol} 成交量 最终失败")
 
     # 获取 换手率
-    _tor = -1.0
     _tor_xpaths = [
+        '//div[contains(@class, "cPJgvg")][.//dt[contains(text(), "Volume/Market cap")]]//dd[@class="sc-8755d3ba-0 eXRmzO base-text"]/text()',
+        '//div[contains(@class, "statsBlockInner")][.//div[contains(text(), "24h Volume / Market Cap")]]//div[@class="priceValue"]/text()',
         '//*[@id="section-coin-stats"]/div/dl/div[3]/div/dd',
         '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[2]/div/div[3]/div[1]/div[1]/div[2]/div/div[2]',
         '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[1]/div[2]/div/div[2]',
@@ -248,8 +258,9 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
             logger.error(f"{_symbol} 获取 换手率 元素失效，跳过: {err}")
             continue
         except Exception as err:
-            logger.error(f"{_symbol} 获取 换手率 失败，跳过: {err}")
-            logger.exception(err)
+            if _symbol != "DEFI/USDT":  # DEFI本身就没有数据，跳过告警
+                logger.error(f"{_symbol} 获取 换手率 失败，跳过: {err}")
+                logger.exception(err)
             continue
     if _tor == -1.0: logger.warning(f"{_symbol} 换手率 最终失败")
 
