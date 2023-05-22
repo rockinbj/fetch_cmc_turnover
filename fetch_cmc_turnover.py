@@ -281,17 +281,19 @@ def save_for_one(pair, driver_path):
     _symbol = pair["marketPair"]
 
     # 为每个线程创建独立的drvier，防止冲突
-    temp_dir = Path(tempfile.mkdtemp())
-    temp_file = temp_dir/"chromedriver"
-    shutil.copy2(driver_path, str(temp_file))
-    driver = webdriver.Chrome(executable_path=str(temp_file), options=chrome_options)
+    temp_dir = ROOT_PATH/"data"/"temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)  # temp目录不存在 则自动创建
+    with tempfile.NamedTemporaryFile(suffix='.chromedriver', dir=temp_dir, mode="wb", delete=False) as temp_file:
+        src_file = open(driver_path, 'rb')
+        temp_file.write(src_file.read())
+        temp_file.close()
+        src_file.close()
+        driver = webdriver.Chrome(executable_path=temp_file.name, options=chrome_options)
 
-    # _pct = get_cmc_turnover_rate(_name, _symbol, _driver=driver)
-    _cap, _vol, _tor = get_cmc_cap_vol_tor(_name, _symbol, driver)
+        _cap, _vol, _tor = get_cmc_cap_vol_tor(_name, _symbol, driver)
 
-    # 清理driver和临时目录
-    driver.quit()
-    shutil.rmtree(temp_dir)
+        driver.quit()
+        os.remove(temp_file.name)
 
     # 获取当前时间并将分钟和秒设置为0，以便时间戳仅精确到小时
     _now = datetime.now().replace(minute=0, second=0, microsecond=0)
