@@ -1,3 +1,4 @@
+import errno
 import os
 import platform
 import shutil
@@ -6,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 ROOT_PATH = Path(__file__).resolve().parent
@@ -29,9 +31,9 @@ chrome_options.add_argument("--headless")  # 无头模式，不显示浏览器�
 pd.set_option('display.max_columns', None)
 pd.set_option('display.expand_frame_repr', False)
 
-TEST = False
+TEST = True
 TEST_SYMBOLS = ["SXP"]
-OTHER_SYMBOL_NUM = 2  # 最小1
+OTHER_SYMBOL_NUM = 1  # 最小1
 PARALLEL = True
 THREADS = 5
 # CSV_FILE = ROOT_PATH/"data"/"cmc_turnover_rate.csv"
@@ -61,11 +63,15 @@ def retry_wrapper(func, func_name='', retry_times=5, sleep_seconds=5, if_exit=Tr
         try:
             result = func(**params)
             return result
-        except TimeoutException as e:
-            logger.error(f"{func_name} 超时，{sleep_seconds} 秒后重试")
-        except Exception as e:
-            logger.error(f"{func_name} 报错，程序暂停 {sleep_seconds} 秒： {e}")
-            logger.exception(e)
+        except TimeoutException as err:
+            logger.error(f"{func_name} 超时，{sleep_seconds} 秒后重试: {err}")
+        except OSError as err:
+            # 如果是OSError: [Errno 26] Text file busy: 'chromedriver'，暂停重试 通常就没问题
+            if err.errno == errno.ETXTBSY:
+                logger.error(f"{func_name} 访问冲突，{sleep_seconds} 秒后重试: {err}")
+        except Exception as err:
+            logger.error(f"{func_name} 报错，程序暂停 {sleep_seconds} 秒： {err}")
+            logger.exception(err)
             time.sleep(sleep_seconds)
     else:
         if if_exit:
@@ -284,7 +290,8 @@ def save_for_one(pair, driver_path):
     # 为每个线程创建独立的drvier，防止冲突
     temp_dir = ROOT_PATH/"data"/"temp"
     temp_dir.mkdir(parents=True, exist_ok=True)  # temp目录不存在 则自动创建
-    with tempfile.NamedTemporaryFile(suffix='.chromedriver', dir=temp_dir, mode="wb", delete=False) as temp_file:
+    uuid_suffix = f"_{uuid.uuid4().hex}.chromedriver"  # 生成一个UUID文件名
+    with tempfile.NamedTemporaryFile(suffix=uuid_suffix, dir=temp_dir, mode="wb", delete=False) as temp_file:
         src_file = open(driver_path, 'rb')
         temp_file.write(src_file.read())
         temp_file.close()
