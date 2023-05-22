@@ -290,7 +290,9 @@ def save_for_one(pair, driver_path):
         temp_file.close()
         src_file.close()
         if platform.system() == "Linux": os.chmod(temp_file.name, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
-        driver = webdriver.Chrome(executable_path=temp_file.name, options=chrome_options)
+        driver = retry_wrapper(webdriver.Chrome, func_name=f"{_symbol} create webdriver.Chrome",
+                               retry_times=3, sleep_seconds=1, if_exit=False,
+                               executable_path=temp_file.name, options=chrome_options)
 
         _cap, _vol, _tor = get_cmc_cap_vol_tor(_name, _symbol, driver)
 
