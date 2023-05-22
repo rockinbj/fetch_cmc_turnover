@@ -1,6 +1,7 @@
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -288,6 +289,7 @@ def save_for_one(pair, driver_path):
         temp_file.write(src_file.read())
         temp_file.close()
         src_file.close()
+        if platform.system() == "Linux": os.chmod(temp_file.name, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
         driver = webdriver.Chrome(executable_path=temp_file.name, options=chrome_options)
 
         _cap, _vol, _tor = get_cmc_cap_vol_tor(_name, _symbol, driver)
