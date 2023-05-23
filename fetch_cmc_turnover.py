@@ -31,14 +31,13 @@ chrome_options.add_argument("--headless")  # 无头模式，不显示浏览器�
 pd.set_option('display.max_columns', None)
 pd.set_option('display.expand_frame_repr', False)
 
-TEST = True
+TEST = False
 TEST_SYMBOLS = ["SXP"]
 OTHER_SYMBOL_NUM = 1  # 最小1
 PARALLEL = True
-THREADS = 5
-# CSV_FILE = ROOT_PATH/"data"/"cmc_turnover_rate.csv"
-CSV_FILE = ROOT_PATH/"data"/"cmc_cap_vol_tor.csv"
 RAND_WAIT_SEC = 0.5
+THREADS = 5
+CSV_FILE = ROOT_PATH/"data"/"cmc_cap_vol_tor.csv"
 
 # cmc页面上有错误数据，此手写列表用来修正错误
 # 包含"KNC"的symbol，用指定的str作为name
@@ -65,10 +64,15 @@ def retry_wrapper(func, func_name='', retry_times=5, sleep_seconds=5, if_exit=Tr
             return result
         except TimeoutException as err:
             logger.error(f"{func_name} 超时，{sleep_seconds} 秒后重试: {err}")
+            time.sleep(sleep_seconds)
         except OSError as err:
             # 如果是OSError: [Errno 26] Text file busy: 'chromedriver'，暂停重试 通常就没问题
             if err.errno == errno.ETXTBSY:
                 logger.error(f"{func_name} 访问冲突，{sleep_seconds} 秒后重试: {err}")
+                time.sleep(sleep_seconds)
+            else:
+                logger.error(f"{func_name} 报错，程序暂停 {sleep_seconds} 秒： {err}")
+                time.sleep(sleep_seconds)
         except Exception as err:
             logger.error(f"{func_name} 报错，程序暂停 {sleep_seconds} 秒： {err}")
             logger.exception(err)
@@ -288,23 +292,18 @@ def save_for_one(pair, driver_path):
     _symbol = pair["marketPair"]
 
     # 为每个线程创建独立的drvier，防止冲突
-    temp_dir = ROOT_PATH/"data"/"temp"
-    temp_dir.mkdir(parents=True, exist_ok=True)  # temp目录不存在 则自动创建
-    uuid_suffix = f"_{uuid.uuid4().hex}.chromedriver"  # 生成一个UUID文件名
-    with tempfile.NamedTemporaryFile(suffix=uuid_suffix, dir=temp_dir, mode="wb", delete=False) as temp_file:
-        src_file = open(driver_path, 'rb')
-        temp_file.write(src_file.read())
-        temp_file.close()
-        src_file.close()
-        if platform.system() == "Linux": os.chmod(temp_file.name, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
-        driver = retry_wrapper(webdriver.Chrome, func_name=f"{_symbol} create webdriver.Chrome",
-                               retry_times=3, sleep_seconds=1, if_exit=False,
-                               executable_path=temp_file.name, options=chrome_options)
+    temp_dir = Path(tempfile.mkdtemp(dir=str(ROOT_PATH/"data"/"temp")))
+    temp_file = temp_dir / "chromedriver"
+    shutil.copy(driver_path, str(temp_file))
+    driver = retry_wrapper(webdriver.Chrome, func_name=f"{_symbol} create webdriver.Chrome",
+                           retry_times=3, sleep_seconds=1, if_exit=False,
+                           executable_path=str(temp_file), options=chrome_options)
 
-        _cap, _vol, _tor = get_cmc_cap_vol_tor(_name, _symbol, driver)
+    _cap, _vol, _tor = get_cmc_cap_vol_tor(_name, _symbol, driver)
 
-        driver.quit()
-        os.remove(temp_file.name)
+    # 清理driver和临时目录
+    driver.quit()
+    shutil.rmtree(temp_dir)
 
     # 获取当前时间并将分钟和秒设置为0，以便时间戳仅精确到小时
     _now = datetime.now().replace(minute=0, second=0, microsecond=0)
