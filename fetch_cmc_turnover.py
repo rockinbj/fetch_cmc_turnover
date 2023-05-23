@@ -33,7 +33,7 @@ pd.set_option('display.expand_frame_repr', False)
 
 TEST = False
 TEST_SYMBOLS = ["SXP"]
-OTHER_SYMBOL_NUM = 1  # 最小1
+OTHER_TEST_SYMBOL_NUM = 1  # 最小1
 PARALLEL = True
 RAND_WAIT_SEC = 0.5
 THREADS = 5
@@ -379,7 +379,7 @@ def main():
     # 如果是测试局，减少币种数量，可以指定 测试币种
     if TEST:
         cmc_pairs_ori = cmc_pairs
-        cmc_pairs = cmc_pairs_ori[-OTHER_SYMBOL_NUM:]
+        cmc_pairs = cmc_pairs_ori[-OTHER_TEST_SYMBOL_NUM:]
         for s in TEST_SYMBOLS:
             for p in cmc_pairs_ori:
                 if s in p["marketPair"]: cmc_pairs.append(p)
