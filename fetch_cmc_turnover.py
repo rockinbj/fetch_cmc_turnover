@@ -32,7 +32,7 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.expand_frame_repr', False)
 
 TEST = False
-TEST_SYMBOLS = ["SXP"]
+TEST_SYMBOLS = ["XEM", "DEFI"]
 OTHER_TEST_SYMBOL_NUM = 1  # 最小1
 PARALLEL = True
 RAND_WAIT_SEC = 0.5
@@ -61,7 +61,17 @@ def retry_wrapper(func, func_name='', retry_times=5, sleep_seconds=5, if_exit=Tr
     for _ in range(retry_times):
         try:
             result = func(**params)
+
+            # 对 爬取到的 元素值 做特殊处理，如果取回是 $0 则重新爬取
+            if "fetch_web_element" in func_name and result.text == "$0":
+                logger.debug(f"{func_name} 爬取 到 $0, {sleep_seconds} 秒后 重试")
+                time.sleep(sleep_seconds)
+                continue
+
             return result
+        except NoSuchElementException:
+            # 如果是 未找到元素 异常，则不处理，原样抛出
+            raise
         except TimeoutException as err:
             logger.error(f"{func_name} 超时，{sleep_seconds} 秒后重试: {err}")
             time.sleep(sleep_seconds)
@@ -181,7 +191,7 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
     page_url = f"https://coinmarketcap.com/currencies/{_name}"
     logger.debug(f"{page_url}")
 
-    retry_wrapper(_driver.get, func_name=f"webpage {_symbol}", sleep_seconds=2, if_exit=False, url=page_url)
+    retry_wrapper(_driver.get, func_name=f"access webpage {_symbol}", sleep_seconds=2, if_exit=False, url=page_url)
 
     _cap = -1.0
     _vol = -1.0
@@ -190,17 +200,20 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
     # 获取 流通市值
     # 多个xpath，逐一尝试
     _cap_xpaths = [
-        '//div[contains(@class, "cPJgvg")][.//dt[contains(text(), "Market cap") and not(contains(text(), "Volume"))]]//dd[@class="sc-8755d3ba-0 eXRmzO base-text"]',
-        '//div[contains(@class, "statsBlockInner")][.//div[contains(text(), "Market Cap") and not(contains(text(), "24h Volume / Market Cap"))]]//div[@class="statsValue"]',
-        '//*[@id="section-coin-stats"]/div/dl/div[1]/div[1]/dd',
-        '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[2]/div/div[3]/div[1]/div[1]/div[1]/div[2]/div',
-        '//*[@id="__next"]/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[1]/div[1]/div[2]/div',
+        r"//div[contains(@class, 'cPJgvg')][.//dt[contains(text(), 'Market cap') and not(contains(text(), 'Volume'))]]//dd[@class='sc-8755d3ba-0 eXRmzO base-text']",
+        "//div[contains(@class, 'statsBlockInner')][.//div[contains(text(), 'Market Cap') and not(contains(text(), '24h Volume / Market Cap'))]]//div[@class='statsValue']",
+        "//*[@id='section-coin-stats']/div/dl/div[1]/div[1]/dd",
+        "//*[@id='__next']/div/div[1]/div[2]/div/div[1]/div[2]/div/div[3]/div[1]/div[1]/div[1]/div[2]/div",
+        "//*[@id='__next']/div/div[1]/div[2]/div/div[1]/div[3]/div/div[3]/div[1]/div[1]/div[1]/div[2]/div",
     ]
     for x in _cap_xpaths:
         try:
-            _cap_item = _driver.find_element_by_xpath(x)
+            # _cap_item = _driver.find_element_by_xpath(xpath=x)
+            _cap_item = retry_wrapper(_driver.find_element_by_xpath, func_name=f"fetch_web_element {_symbol} cap",
+                                      sleep_seconds=2, if_exit=False,
+                                      xpath=x)
             _cap_str = _cap_item.text
-            _cap_str = _cap_str.replace("$","").replace(",","")
+            _cap_str = _cap_str.replace("$", "").replace(",", "")
             _cap = float(_cap_str)
 
             logger.debug(f"{_symbol} 流通市值 找到 {_cap}")
@@ -228,7 +241,10 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
     ]
     for x in _vol_xpaths:
         try:
-            _vol_item = _driver.find_element_by_xpath(x)
+            # _vol_item = _driver.find_element_by_xpath(x)
+            _vol_item = retry_wrapper(_driver.find_element_by_xpath, func_name=f"fetch_web_element {_symbol} vol",
+                                      sleep_seconds=2, if_exit=False,
+                                      xpath=x)
             _vol_str = _vol_item.text
             _vol_str = _vol_str.replace("$", "").replace(",", "")
             _vol = float(_vol_str)
@@ -257,7 +273,10 @@ def get_cmc_cap_vol_tor(_name, _symbol, _driver):
     ]
     for x in _tor_xpaths:
         try:
-            _tor_item = _driver.find_element_by_xpath(x)
+            # _tor_item = _driver.find_element_by_xpath(x)
+            _tor_item = retry_wrapper(_driver.find_element_by_xpath, func_name=f"fetch_web_element {_symbol} tor",
+                                      sleep_seconds=2, if_exit=False,
+                                      xpath=x)
             _tor_str = _tor_item.text
             _tor_str = _tor_str.replace("%", "")
             _tor = float(_tor_str)
@@ -295,6 +314,7 @@ def save_for_one(pair, driver_path):
     temp_dir = Path(tempfile.mkdtemp(dir=str(ROOT_PATH/"data"/"temp")))
     temp_file = temp_dir / "chromedriver"
     shutil.copy(driver_path, str(temp_file))
+
     driver = retry_wrapper(webdriver.Chrome, func_name=f"{_symbol} create webdriver.Chrome",
                            retry_times=3, sleep_seconds=1, if_exit=False,
                            executable_path=str(temp_file), options=chrome_options)
