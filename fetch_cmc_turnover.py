@@ -37,7 +37,7 @@ OTHER_SYMBOL_NUM = 1  # 最小1
 PARALLEL = True
 RAND_WAIT_SEC = 0.5
 THREADS = 5
-CSV_FILE = ROOT_PATH/"data"/"cmc_cap_vol_tor.csv"
+CSV_FILE = ROOT_PATH/"data"/"cmc_cap_vol_tor.csv" if TEST is False else ROOT_PATH/"data"/"temp"/"test.csv"
 
 # cmc页面上有错误数据，此手写列表用来修正错误
 # 包含"KNC"的symbol，用指定的str作为name
